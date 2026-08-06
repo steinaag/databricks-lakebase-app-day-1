@@ -220,6 +220,83 @@ def remove_from_watchlist(symbol):
     return jsonify({"symbol": symbol, "deleted": True})
 
 
+@app.route("/news/<symbol>", methods=["GET"])
+def get_news(symbol):
+    """
+    Fetch recent news for a ticker symbol from the Massive API and store it
+    in Lakebase, then return the news articles.
+    """
+    ensure_news_table()
+    
+    symbol = symbol.strip().upper() if isinstance(symbol, str) else ""
+    
+    if not symbol or not _TICKER_RE.match(symbol):
+        return jsonify({"error": f"Invalid ticker symbol: {symbol!r}"}), 400
+    
+    client = MassiveClient()
+    
+    try:
+        # Fetch news from Massive API
+        limit = int(request.args.get("limit", 10))
+        response = client.get_ticker_news(symbol, limit=limit)
+        
+        # Extract news items from response
+        news_items = response.get("results", [])
+        
+        if not news_items:
+            return jsonify({"symbol": symbol, "news": [], "count": 0})
+        
+        # Store news in Lakebase
+        import json as _json
+        with lakebase.get_connection() as conn:
+            with conn.cursor() as cur:
+                for item in news_items:
+                    # Extract fields from the news item
+                    news_id = item.get("id") or item.get("article_id") or ""
+                    if not news_id:
+                        continue
+                    
+                    title = item.get("title", "")
+                    description = item.get("description", "")
+                    published_at = item.get("published_utc") or item.get("published_at")
+                    source = item.get("publisher", {}).get("name") if isinstance(item.get("publisher"), dict) else item.get("publisher", "")
+                    url = item.get("article_url") or item.get("url", "")
+                    image_url = item.get("image_url", "")
+                    
+                    cur.execute(
+                        f"""
+                        INSERT INTO {NEWS_TABLE_NAME} 
+                        (id, symbol, title, description, published_at, source, url, image_url, fetched_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+                        ON CONFLICT (id) DO UPDATE
+                            SET fetched_at = EXCLUDED.fetched_at
+                        """,
+                        (news_id, symbol, title, description, published_at, source, url, image_url),
+                    )
+                conn.commit()
+        
+        # Fetch the stored news from Lakebase
+        rows = lakebase.run_query(
+            f"""
+            SELECT id, symbol, title, description, published_at, source, url, image_url, fetched_at
+            FROM {NEWS_TABLE_NAME}
+            WHERE symbol = %s
+            ORDER BY published_at DESC
+            LIMIT %s
+            """,
+            (symbol, limit),
+        )
+        
+        return jsonify({"symbol": symbol, "news": rows, "count": len(rows)})
+    
+    except requests.HTTPError as e:
+        logger.exception(f"Failed to fetch news for {symbol}")
+        return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
+    except Exception as e:
+        logger.exception(f"Error processing news for {symbol}")
+        return jsonify({"error": f"Error processing news: {str(e)}"}), 500
+
+
 def _extract_latest_price(data: dict) -> float | None:
     """Pull the trade price out of the Massive 'previous close' response shape.
 
