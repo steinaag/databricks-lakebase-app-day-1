@@ -230,6 +230,30 @@
       border-left-color: #f56565 !important;
       background: #fff5f5 !important;
     }
+
+    .delete-btn {
+      background: #fc8181;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .delete-btn:hover {
+      background: #f56565;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(245, 101, 101, 0.4);
+    }
+
+    .delete-btn:active {
+      transform: translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -253,6 +277,7 @@
             <th>Email</th>
             <th>Latest price</th>
             <th>Updated</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="watchlist-body"></tbody>
@@ -315,6 +340,37 @@
       } catch (err) {
         resultEl.textContent = "Request failed: " + err;
         resultEl.className = "error";
+      }
+    });
+
+    // Handle delete button clicks using event delegation
+    watchlistBody.addEventListener("click", async (e) => {
+      if (e.target.classList.contains("delete-btn")) {
+        const symbol = e.target.getAttribute("data-symbol");
+        if (!confirm(`Are you sure you want to remove ${symbol} from your watchlist?`)) {
+          return;
+        }
+
+        resultEl.textContent = `Removing ${symbol}...`;
+        resultEl.className = "loading";
+
+        try {
+          const resp = await fetch(`/watchlist/${symbol}`, {
+            method: "DELETE",
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            resultEl.textContent = "Error: " + (data.error || resp.statusText);
+            resultEl.className = "error";
+            return;
+          }
+          resultEl.textContent = `✓ Successfully removed ${symbol} from watchlist`;
+          resultEl.className = "";
+          loadWatchlist();
+        } catch (err) {
+          resultEl.textContent = "Request failed: " + err;
+          resultEl.className = "error";
+        }
       }
     });
 
