@@ -435,7 +435,7 @@
             ? "$" + Number(row.latest_price).toFixed(2)
             : "-";
           const updated = row.updated_at ? new Date(row.updated_at).toLocaleString() : "-";
-          tr.innerHTML = `<td>${row.symbol}</td><td>${row.email || "-"}</td><td>${price}</td><td>${updated}</td><td><button class="delete-btn" data-symbol="${row.symbol}">Delete</button></td>`;
+          tr.innerHTML = `<td>${row.symbol}</td><td>${row.email || "-"}</td><td>${price}</td><td>${updated}</td><td><button class="news-btn" data-symbol="${row.symbol}">News</button><button class="delete-btn" data-symbol="${row.symbol}">Delete</button></td>`;
           watchlistBody.appendChild(tr);
         });
       } catch (err) {
